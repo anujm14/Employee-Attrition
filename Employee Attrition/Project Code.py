@@ -7,11 +7,11 @@ import pandas as pd
 
 # Importing the dataset
 train_data = pd.read_csv('train.csv')
-X_train = train_data.iloc[:, [0, 9]].values
+X_train = train_data.iloc[:, [0, 7]].values
 y_train = train_data.iloc[:, 9].values
 
 test_data = pd.read_csv('test.csv')
-X_test = test_data.iloc[:, [1, 10]].values
+X_test = test_data.iloc[:, [1, 8]].values
 y_test = test_data.iloc[:, 10].values
 
 
