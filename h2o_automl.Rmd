@@ -2,7 +2,9 @@
 title: "HR Analytics Employee Attrition & Performance"
 author: "Anuj Mishra"
 date: "November 12, 2017"
-output: word_document
+output:
+  html_document:
+    df_print: paged
 ---
 
 ```{r setup, include=FALSE}
