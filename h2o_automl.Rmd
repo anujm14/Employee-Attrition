@@ -191,6 +191,48 @@ tibble(
 
 ```
 
+Conclusion:
+
+It is important to understand that the accuracy of this model can be missleading.
+If Attrition = Yes, accuracy of model is 84%, it's pretty good
+But if Attrition = No, accuracy of model is 76%, it doesn't seem good
+Better understanding of business problem is required before coming to final conclusion.
+Let's talk about precision and recall
+Precision is when the model predicts yes, how often is it actually yes. 
+Recall (also true positive rate or specificity) is when the actual value is yes how often is the model correctly predict. 
+
+HR will really care about recall or when the actual value is Attrition = YES how often the model predicts YES.
+Recall for our model is 59%. In an HR context, this is 59% more employees that could potentially be targeted prior to quiting. From that standpoint, an organization that loses 100 people per year could possibly target 59 implementing measures to retain.
+
+
+Let's find out feature imporatce what causes attrition using Lime
+this package that enables breakdown of complex, black-box machine learning models into variable importance plots. 
+We'll need to make two custom functions:
+
+model_type: Used to tell lime what type of model we are dealing with. It could be classification, regression, survival, etc.
+
+predict_model: Used to allow lime to perform predictions that its algorithm can interpret.
+
+The first thing we need to do is identify the class of our model leader object. 
+We do this with the class() function.
+```{r Setup}
+class(automl_leader)
+
+```
+create our model_type function. It's only input is x the h2o model. The function simply returns "classification", which tells LIME we are classifying.
+```{r}
+# Setup lime::model_type() function for h2o
+model_type.H2OBinomialModel <- function(x, ...) {
+    # Function tells lime() what model type we are dealing with
+    # 'classification', 'regression', 'survival', 'clustering', 'multilabel', etc
+    #
+    # x is our h2o model
+    
+    return("classification")
+}
+```
+
+
 
 ```{r cars, eval=FALSE, include=FALSE}
 summary(cars)

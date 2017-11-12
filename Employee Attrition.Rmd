@@ -1,0 +1,326 @@
+---
+title: "HR Analytics Employee Attrition"
+author: "Anuj Mishra"
+date: "November 12, 2017"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+HR Analytics helps human resources to interpret data, find out the trends & help take required steps to keep the organization running smoothly & profitably. 
+It has helped human resources to be more active and gain involved role in an organization's planning & objectives. 
+
+Install required packages
+```{r}
+if (!require("corrplot"))          install.packages("corrplot")
+if (!require("ggplot2"))           install.packages("ggplot2")
+if (!require("caret"))             install.packages("caret")
+if (!require("dplyr"))             install.packages("dplyr")
+if (!require("data.table"))        install.packages("data.table")
+if (!require("VIM"))               install.packages("VIM")
+if (!require("DT"))                install.packages("DT")
+if (!require("gridExtra"))              install.packages("gridExtra")
+if (!require("randomForest"))      install.packages("randomForest")
+if (!require("Metrics"))   install.packages("Metrics")
+if (!require("pROC"))          install.packages("pROC")
+if (!require("e1071"))      install.packages("e1071")
+if (!require("dtree"))      install.packages("dtree")
+if (!require("DMwR"))      install.packages("DMwR")
+
+```
+
+Include required libraries
+```{r}
+library(data.table)
+library(dplyr)
+library(VIM)
+library(DT)
+library(gridExtra)
+library(ggplot2)
+library(caret)
+library(Metrics)
+library(randomForest)
+library(pROC)
+library(e1071)
+library(dtree)
+library(corrplot)
+library(DMwR)
+```
+
+Romove all previous envoirnment variables
+```{r}
+rm(list = ls())
+```
+
+Reding data using fread() for fast read
+
+```{r}
+
+emp_data_raw <- fread('IBM Employee Attrition & Performance.csv',sep = ',',header = TRUE,stringsAsFactors = TRUE)
+```
+
+Data Exploration
+
+```{r}
+names(emp_data_raw)
+glimpse(emp_data_raw)
+summary(emp_data_raw)
+```
+
+Conclusion:
+Observations: 1,470 with Variables: 35
+
+Class Label is Attrition with 1232 'NO' and 237 'Yes' that shows the unbalance class label. we have to pay attention to the unbalance class algorithm problems!
+
+Employee Count is equal 1 for all observation which can not generate useful value for this sample data. In this analysis, we will remove it.
+
+Over 18 is equal to 'Y', which means employee is not less than 18 years old. this attribute should be considered for the future, maybe by changing the rule of employment, young people under 18 can also work in companies. Here, according to the data set, we will remove it.
+
+Moreover, Standard Hours is equal 80 for all observation. the decision for this attribute is same to Over18 and Employee Count. BusinessTravel, Department, EducationField, Gender, jobRole, MaritalStatus and OverTime are categorical data and other variabels are continues.
+
+Some of variables are related to the years of working wich can be a good candidate for feature generation. Some of variable are related to personal issues like WorkLifeBalance, RelationshipSatisfaction, JobSatisfaction,EnvironmentSatisfaction etc.
+
+There are some variables that are related to the income like MonthlyIncome, PercentSalaryIcrease, etc.
+
+EmployeeNumber is a variable for identifying the specific employee.If we have more information about employee and the structure of the employee number, then we can extract some new features. But now it is not possible and we have to remove it from our data set.
+
+More and more, we have to investigate that, how the company objective factors influence in attition employees, and what kind of working enviroment most will cause employees attrition.
+
+Check for Missing values
+
+```{r}
+apply(is.na(emp_data_raw), 2, sum)
+VIM::aggr(emp_data_raw)
+```
+
+Conclusion:
+There are no missing values in this data set.
+
+Remove non-value features
+These variables can not play significant role because they are same for all records. also, EmployeeNumber doesn't add any value to the model.
+
+```{r}
+cat("Employee Attrition Data Set has ",dim(emp_data_raw)[1], " Rows and ", dim(emp_data_raw)[2], " Columns" )
+```
+
+Let's drop such variables
+```{r}
+emp_data_raw$EmployeeNumber<- NULL
+emp_data_raw$StandardHours <- NULL
+emp_data_raw$Over18 <- NULL
+emp_data_raw$EmployeeCount <- NULL
+cat("Data Set has ",dim(emp_data_raw)[1], " Rows and ", dim(emp_data_raw)[2], " Columns")
+```
+
+Check for duplicate records
+
+```{r}
+sum (is.na(duplicated(emp_data_raw)))
+```
+Conclusion: There are no duplicate records in this data set
+
+Edit variable types
+There are some attributes that are categorical, but in the data set are integer.
+e.g.- EnvironmentSatisfaction, Education, StockOptionLevel
+We have to change them to categorical. also, we do not need any dummy variable creation, where some machine learning algorithms like RF, XGBoost etc. can use categorical variables.
+
+For other algorithms like NN we have to change categorical variable more than two level to dummy variable Variable with twol level (Binary) can be change to number very easy.
+
+```{r}
+emp_data_raw$Education <- factor(emp_data_raw$Education)
+emp_data_raw$EnvironmentSatisfaction <- factor(emp_data_raw$EnvironmentSatisfaction)
+emp_data_raw$JobInvolvement <- factor(emp_data_raw$JobInvolvement)
+emp_data_raw$JobLevel <- factor(emp_data_raw$JobLevel)
+emp_data_raw$JobSatisfaction <- factor(emp_data_raw$JobSatisfaction)
+emp_data_raw$PerformanceRating <- factor(emp_data_raw$PerformanceRating)
+emp_data_raw$RelationshipSatisfaction <- factor(emp_data_raw$RelationshipSatisfaction)
+emp_data_raw$StockOptionLevel <- factor(emp_data_raw$StockOptionLevel)
+emp_data_raw$WorkLifeBalance <- factor(emp_data_raw$WorkLifeBalance)
+
+```
+
+Data Visualization
+
+```{r}
+emp_data_raw %>%
+        group_by(Attrition) %>%
+        tally() %>%
+        ggplot(aes(x = Attrition, y = n,fill=Attrition)) +
+        geom_bar(stat = "identity") +
+        theme_minimal()+
+        labs(x="Attrition", y="Number of Attritions")+
+        ggtitle("Employee Attrition")+
+        geom_text(aes(label = n), vjust = -0.5, position = position_dodge(0.9))
+```
+
+Conclusion:
+As we see here, 237/1470=0.16 % of the data label shows the "Yes" in Attrition. this problem should be handeled during the process because unbalanced dataset will bias the prediction model towards the more common class (here is 'NO').
+
+```{r}
+ggplot(data=emp_data_raw, aes(emp_data_raw$Age)) + 
+        geom_histogram(breaks=seq(20, 50, by=2), 
+                       col="red", 
+                       aes(fill=..count..))+
+        labs(x="Age", y="Count")+
+        scale_fill_gradient("Count", low="orange", high="blue")
+```
+
+Conclusion:
+the majority of employees are between 28-36 years. 34-36 years old are the highest count.
+
+the distribution of the data according to the Business Tralvel situation.
+```{r}
+emp_data_raw %>%
+        group_by(BusinessTravel, Attrition) %>%
+        tally() %>%
+        ggplot(aes(x = BusinessTravel, y = n,fill=Attrition)) +
+        geom_bar(stat = "identity") +
+        theme_minimal()+
+        labs(x="Business Travel", y="Number Attrition")+
+        ggtitle("Attrition according to the Business Travel")+
+        geom_text(aes(label = n), vjust = -0.5, position = position_dodge(0.9))
+```
+
+Conclusion:
+more than 70% of employees travel rarely where just 10 % of them has no travel.
+
+```{r}
+emp_data_raw %>%
+        group_by(Department, Attrition) %>%
+        tally() %>%
+        ggplot(aes(x = Department, y = n,fill=Attrition)) +
+        geom_bar(stat = "identity") +
+        theme_minimal()+
+        ggtitle("Attrition according to the Department")+
+        geom_text(aes(label = n), vjust = -0.1, position = position_dodge(0.9))
+```
+
+Conclusuion
+
+```{r}
+emp_data_raw %>%
+        group_by(Education, Attrition) %>%
+        tally() %>%
+        ggplot(aes(x = Education, y = n,fill=Attrition)) +
+        geom_bar(stat = "identity") +
+        theme_minimal()+
+        geom_text(aes(label = n), vjust = -0.5, position = position_dodge(0.9))+
+        labs(x="Education", y="Number Attriation")+
+        ggtitle("Attrition in regards to Education Level")
+
+```
+
+Conclusuion
+
+```{r}
+emp_data_raw %>%
+        group_by(Gender, Attrition) %>%
+        tally() %>%
+        ggplot(aes(x = Gender, y = n,fill=Attrition)) +
+        geom_bar(stat = "identity") +
+        theme_minimal()+
+        geom_text(aes(label = n), vjust = -0.3, position = position_dodge(0.9))+
+        labs(x="Gender", y="Number Attrition")+
+        ggtitle("Attrition in regards to Over time")
+```
+
+Conclusuion
+
+```{r}
+emp_data_raw %>%
+        ggplot(mapping = aes(x = MonthlyIncome)) + 
+        geom_histogram(aes(fill = Attrition), bins=20)+
+        labs(x="Monthlt Income", y="Number Attrition")+
+        ggtitle("Attrition in regards to Monthly Income")
+```
+
+Conclusuion
+
+```{r}
+emp_data_raw %>%
+        group_by(OverTime, Attrition) %>%
+        tally() %>%
+        ggplot(aes(x = OverTime, y = n,fill=Attrition)) +
+        geom_bar(stat = "identity") +
+        theme_minimal()+
+        geom_text(aes(label = n), vjust = -0.3, position = position_dodge(0.9))+
+        labs(x="Over time", y="Number Attrition")+
+        ggtitle("Attrition in regards to Over time")
+
+```
+
+Conclusion
+
+```{r}
+emp_data_raw %>%
+        group_by(WorkLifeBalance, Attrition) %>%
+        tally() %>%
+        ggplot(aes(x = WorkLifeBalance, y = n,fill=Attrition)) +
+        geom_bar(stat = "identity") +
+        theme_minimal()+
+        geom_text(aes(label = n), vjust = -0.5, position = position_dodge(0.9))+
+        labs(x="  Work Life Balance", y="Number Attrition")+
+        ggtitle("Attrition in regards to  Work Life Balance")
+```
+
+Conclusion
+
+Statistical Modelling to predict employee attrition
+
+Step1: Split the data into Training and Test set (80/20 ratio)
+```{r}
+emp_data <- emp_data_raw
+set.seed(123)
+indexes = sample(1:nrow(emp_data), size=0.8*nrow(emp_data))
+EmpRaw.train.Data <- emp_data[indexes,]
+EmpRaw.test.Data <- emp_data[-indexes,]
+```
+Step2: First, Bulding Random Forest for getting some information about the prediction
+```{r}
+Raw.rf.model <- randomForest(Attrition~.,EmpRaw.train.Data,importance=TRUE,ntree=1000)
+
+varImpPlot(Raw.rf.model)
+```
+
+Conclusion: Over time, Age, MonthlyIncome, Jobrole and TotalWorkingYears are top five variables.
+
+```{r}
+Raw.rf.prd <- predict(Raw.rf.model, newdata = EmpRaw.test.Data)
+confusionMatrix(EmpRaw.test.Data$Attrition, Raw.rf.prd)
+```
+
+ROC Curve
+```{r}
+Raw.rf.plot<- plot.roc(as.numeric(EmpRaw.test.Data$Attrition), as.numeric(Raw.rf.prd),lwd=2, type="b",print.auc=TRUE,col ="blue")
+```
+
+Conclusion:
+Even though Accuracy = 0.8639 which is very good result but not enough measure. We see that the AUC is poor.
+
+```{r}
+
+```
+
+
+
+```{r cars, eval=FALSE, include=FALSE}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, eval=FALSE, include=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
