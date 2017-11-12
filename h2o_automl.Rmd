@@ -1,0 +1,205 @@
+---
+title: "HR Analytics Employee Attrition & Performance"
+author: "Anuj Mishra"
+date: "November 12, 2017"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+Predict attrition of your valuable employees
+Uncover the factors that lead to employee attrition and explore important questions such as 'show me a breakdown of distance from home by job role and attrition' or 'compare average monthly income by education and attrition'.
+
+Step 1: Loading the required packages
+```{r Loading Required packages, eval=FALSE, include=FALSE}
+# Simple excel reader
+if (!require("readxl"))          install.packages("readxl")
+# Plot graphs
+if (!require("ggplot2"))           install.packages("ggplot2")
+# Machine Learning package
+if (!require("h2o"))             install.packages("h2o")
+# Explain complex black-box ML models
+if (!require("lime"))             install.packages("lime")
+# Load tidyverse and other packages
+if (!require("tidyquant"))             install.packages("tidyquant")
+
+```
+
+
+Step 2: Load the data using read_excel()
+```{r Load raw data}
+library(readxl)
+emp_data_raw <- read_excel(path = "D:/DSS 680 Project/IBM Employee Attrition & Performance.xlsx")
+
+
+```
+
+Lets check out raw data
+
+```{r Data Exploration}
+str(emp_data_raw)
+head(emp_data_raw)
+summary(emp_data_raw)
+
+```
+
+Data Preprocessing
+change all character data types to factors.
+```{r Data Preprocessing}
+library(tidyquant)
+emp_data <- emp_data_raw %>%
+    mutate_if(is.character, as.factor) %>%
+    select(Attrition, everything())
+```
+
+Let's take a glimpse at the processed dataset. We can see all of the columns. Note our target variable ("Attrition") is the first column.
+
+```{r glimpse of data}
+glimpse(emp_data)
+
+```
+
+Modelling Employee Attrition using h2o.ai 
+We are going to use the h2o.automl() function from the H2O platform to model employee attrition.
+
+```{r Statistical Modelling}
+library(h2o)
+#initialize the Java Virtual Machine (JVM) that H2O uses locally
+h2o.init()
+# Turn off output of progress bars
+h2o.no_progress() 
+#change our data to an h2o object that the package can interpret.
+emp_data_h2o <- as.h2o(emp_data)
+
+```
+
+Split the data into training, validation, and test sets. 
+Our preference is to use 70%, 15%, 15%, respectively.
+```{r Split data}
+split_h2o <- h2o.splitFrame(emp_data_h2o, c(0.7, 0.15), seed = 1234 )
+
+train_h2o <- h2o.assign(split_h2o[[1]], "train" ) # 70%
+valid_h2o <- h2o.assign(split_h2o[[2]], "valid" ) # 15%
+test_h2o  <- h2o.assign(split_h2o[[3]], "test" )  # 15%
+```
+
+Statistical Model
+set the target and feature names. 
+The target is what we aim to predict (in this case "Attrition"). 
+The features (every other column) are what we will use to model the prediction.
+
+```{r}
+# Set names for h2o
+y <- "Attrition"
+x <- setdiff(names(train_h2o), y)
+```
+
+h2o Automatic Machine Learning
+run the h2o.automl() 
+
+```{r}
+# Run the automated machine learning 
+automl_models_h2o <- h2o.automl(
+    x = x, #The names of our feature columns.
+    y = y, #The name of our target column.
+    training_frame    = train_h2o, #training set consisting of 70% of the data.
+    leaderboard_frame = valid_h2o, #validation set consisting of 15% of the data.
+    max_runtime_secs  = 30 #supply this to speed up H2O's modeling.
+    )
+```
+
+Results
+All of the models are stored the automl_models_h2o object.
+However, we are only concerned with the leader, which is the best model in terms of accuracy on the validation set. 
+```{r}
+automl_models_h2o
+```
+
+Lets extract leader model from the models object.
+```{r}
+# Extract leader model
+automl_leader <- automl_models_h2o@leader
+automl_leader
+```
+
+Predict
+Now we have got the best model, It's time to test it of test data set.
+This is the true test of performance. 
+```{r}
+# Predict on hold-out set, test_h2o
+pred_h2o <- h2o.predict(object = automl_leader, newdata = test_h2o)
+pred_h2o
+
+```
+
+Performance
+Lets evaluate learder model
+reformat the test set an add the predictions as column so we have the actual and prediction columns side-by-side.
+```{r}
+# Prep for performance assessment
+test_performance <- test_h2o %>%
+    tibble::as_tibble() %>%
+    select(Attrition) %>%
+    add_column(pred = as.vector(pred_h2o$predict)) %>%
+    mutate_if(is.character, as.factor)
+
+head(test_performance)
+```
+
+Confusion Matrix
+
+```{r}
+# Confusion table counts
+confusion_matrix <- test_performance %>% table() 
+confusion_matrix
+```
+
+A binary classification analysis to understand the model performance.
+
+```{r}
+# Performance analysis
+tn <- confusion_matrix[1] #True Negative
+tp <- confusion_matrix[4] #True Positive
+fp <- confusion_matrix[3] #False Positive
+fn <- confusion_matrix[2] #False Negative
+
+accuracy <- (tp + tn) / (tp + tn + fp + fn)
+misclassification_rate <- 1 - accuracy
+recall <- tp / (tp + fn)
+precision <- tp / (tp + fp)
+null_error_rate <- tn / (tp + tn + fp + fn)
+
+#Model Performance Results 
+tibble(
+    accuracy,
+    misclassification_rate,
+    recall,
+    precision,
+    null_error_rate
+) %>% 
+    transpose() 
+
+```
+
+
+```{r cars, eval=FALSE, include=FALSE}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, eval=FALSE, include=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
